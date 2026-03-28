@@ -1,5 +1,6 @@
 #include <obs-module.h>
 #include <obs-frontend-api.h>
+#include <util/config-file.h>
 #include <util/platform.h>
 #include "util/threading.h"
 #include "shared-memory-queue.h"
