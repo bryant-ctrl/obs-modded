@@ -37,6 +37,7 @@ jobs:
 
           $files = @(
             "CMakePresets.json",
+            "cmake\common\versionconfig.cmake",
             "shared\obs-shared-memory-queue\shared-memory-queue.c",
             "shared\obs-shared-memory-queue\shared-memory-queue.h",
             "plugins\win-dshow\CMakeLists.txt",
