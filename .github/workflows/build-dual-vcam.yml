@@ -87,7 +87,7 @@ jobs:
       # ── 5. Download OBS pre-built dependencies ────────────────────────────
       - name: Download obs-deps
         run: |
-          $ver = "2024-01-03"
+          $ver = "2025-08-23"
           $url = "https://github.com/obsproject/obs-deps/releases/download/$ver/windows-deps-$ver-x64.zip"
           Invoke-WebRequest -Uri $url -OutFile deps.zip
           Expand-Archive -Path deps.zip -DestinationPath "${{ github.workspace }}/obs-deps" -Force
