@@ -27,8 +27,6 @@ jobs:
         run: |
           git clone --depth=1 --recurse-submodules --shallow-submodules `
             https://github.com/obsproject/obs-studio.git obs-studio
-          cd obs-studio
-          git fetch --depth=1 origin --tags
         shell: pwsh
 
       # ── 3. Overlay our modified/new files onto the OBS tree ───────────────
@@ -100,6 +98,7 @@ jobs:
         working-directory: obs-studio
         run: |
           cmake --preset windows-x64 `
+            -DOBS_VERSION_OVERRIDE="31.0.0" `
             -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" `
             -DVIRTUALCAM_GUID="${{ env.VIRTUALCAM_GUID }}" `
             -DVIRTUALCAM2_GUID="${{ env.VIRTUALCAM2_GUID }}" `
