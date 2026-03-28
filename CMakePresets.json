@@ -167,9 +167,10 @@
       "generator": "Visual Studio 17 2022",
       "cacheVariables": {
         "GPU_PRIORITY_VAL": {"type": "STRING", "value": "$penv{GPU_PRIORITY_VAL}"},
+        "OBS_VERSION_OVERRIDE": {"type": "STRING", "value": "31.0.0"},
         "VIRTUALCAM_GUID": {"type": "STRING", "value": "A3FCE0F5-3493-419F-958A-ABA1250EC20B"},
         "VIRTUALCAM2_GUID": {"type": "STRING", "value": "B4ED1F06-4594-429F-A69B-BBA2361FD31C"},
-        "ENABLE_BROWSER": true
+        "ENABLE_BROWSER": false
       }
     },
     {
