@@ -117,26 +117,54 @@ jobs:
         shell: pwsh
 
       # ── 9. Collect DLLs ───────────────────────────────────────────────────
+      - name: Find built files
+        run: |
+          Write-Host "=== Searching install tree ==="
+          Get-ChildItem -Recurse "${{ github.workspace }}/install" -Include *.dll,*.bat | Select-Object FullName
+          Write-Host "=== Searching build rundir ==="
+          Get-ChildItem -Recurse "${{ github.workspace }}/obs-studio/build_x64/rundir" -Include *.dll,*.bat | Where-Object { $_.Name -match "virtualcam|win-dshow" } | Select-Object FullName
+          Write-Host "=== Searching build tree for vcam2 ==="
+          Get-ChildItem -Recurse "${{ github.workspace }}/obs-studio/build_x64" -Filter "obs-virtualcam2*" | Select-Object FullName
+        shell: pwsh
+
       - name: Collect artifacts
         run: |
           $out = "${{ github.workspace }}/artifacts"
           New-Item -ItemType Directory -Force -Path $out
 
-          $pluginDir = "${{ github.workspace }}/install/obs-plugins/64bit"
-          $dataDir   = "${{ github.workspace }}/install/data/obs-plugins/win-dshow"
-
-          $items = @(
-            "$pluginDir/win-dshow.dll",
-            "$dataDir/obs-virtualcam-module64.dll",
-            "$dataDir/obs-virtualcam2-module64.dll",
-            "$dataDir/virtualcam-install.bat",
-            "$dataDir/virtualcam-uninstall.bat",
-            "$dataDir/virtualcam2-install.bat",
-            "$dataDir/virtualcam2-uninstall.bat"
+          # Possible locations for built files
+          $searchDirs = @(
+            "${{ github.workspace }}/install/obs-plugins/64bit",
+            "${{ github.workspace }}/install/data/obs-plugins/win-dshow",
+            "${{ github.workspace }}/obs-studio/build_x64/rundir/RelWithDebInfo/obs-plugins/64bit",
+            "${{ github.workspace }}/obs-studio/build_x64/rundir/RelWithDebInfo/data/obs-plugins/win-dshow",
+            "${{ github.workspace }}/obs-studio/build_x64/plugins/win-dshow/RelWithDebInfo",
+            "${{ github.workspace }}/obs-studio/build_x64/plugins/win-dshow/virtualcam-module/RelWithDebInfo",
+            "${{ github.workspace }}/obs-studio/build_x64/plugins/win-dshow/virtualcam2-module/RelWithDebInfo"
           )
-          foreach ($f in $items) {
-            if (Test-Path $f) { Copy-Item $f $out }
-            else { Write-Warning "Not found: $f" }
+
+          $targets = @(
+            "win-dshow.dll",
+            "obs-virtualcam-module64.dll",
+            "obs-virtualcam2-module64.dll",
+            "virtualcam-install.bat",
+            "virtualcam-uninstall.bat",
+            "virtualcam2-install.bat",
+            "virtualcam2-uninstall.bat"
+          )
+
+          foreach ($t in $targets) {
+            $found = $false
+            foreach ($d in $searchDirs) {
+              $p = Join-Path $d $t
+              if (Test-Path $p) {
+                Copy-Item $p $out -Force
+                Write-Host "Found: $p"
+                $found = $true
+                break
+              }
+            }
+            if (-not $found) { Write-Warning "NOT FOUND: $t" }
           }
 
           Write-Host "--- Artifacts ---"
