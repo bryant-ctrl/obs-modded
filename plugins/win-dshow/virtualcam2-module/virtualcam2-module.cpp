@@ -10,8 +10,8 @@ static const REGFILTERPINS AMSPinVideo2 = {nullptr,    false, true,
 					   false,       false, &CLSID_NULL,
 					   nullptr,     1,     &AMSMediaTypesV2};
 
-HINSTANCE dll_inst2 = nullptr;
-volatile long locks2 = 0;
+HINSTANCE dll_inst = nullptr;
+volatile long locks = 0;
 
 /* ========================================================================= */
 
@@ -87,9 +87,9 @@ STDMETHODIMP VCamFactory2::CreateInstance(LPUNKNOWN parent, REFIID,
 STDMETHODIMP VCamFactory2::LockServer(BOOL lock)
 {
 	if (lock) {
-		os_atomic_inc_long(&locks2);
+		os_atomic_inc_long(&locks);
 	} else {
-		os_atomic_dec_long(&locks2);
+		os_atomic_dec_long(&locks);
 	}
 
 	return S_OK;
@@ -157,7 +157,7 @@ static bool RegServers2(bool reg)
 {
 	wchar_t file[MAX_PATH];
 
-	if (!GetModuleFileNameW(dll_inst2, file, MAX_PATH)) {
+	if (!GetModuleFileNameW(dll_inst, file, MAX_PATH)) {
 		return false;
 	}
 
@@ -249,7 +249,7 @@ STDAPI DllInstall(BOOL install, LPCWSTR)
 
 STDAPI DllCanUnloadNow()
 {
-	return os_atomic_load_long(&locks2) ? S_FALSE : S_OK;
+	return os_atomic_load_long(&locks) ? S_FALSE : S_OK;
 }
 
 STDAPI DllGetClassObject(REFCLSID cls, REFIID riid, void **p_ptr)
@@ -274,7 +274,7 @@ STDAPI DllGetClassObject(REFCLSID cls, REFIID riid, void **p_ptr)
 BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID)
 {
 	if (reason == DLL_PROCESS_ATTACH) {
-		dll_inst2 = inst;
+		dll_inst = inst;
 	}
 
 	return true;

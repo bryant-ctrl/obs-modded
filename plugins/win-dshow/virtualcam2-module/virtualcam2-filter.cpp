@@ -14,7 +14,7 @@ using namespace DShow;
 extern bool initialize_placeholder();
 extern const uint8_t *get_placeholder_ptr();
 extern const bool get_placeholder_size(int *out_cx, int *out_cy);
-extern volatile long locks2;
+extern volatile long locks;
 
 /* ========================================================================= */
 
@@ -109,7 +109,7 @@ VCamFilter2::VCamFilter2() : OutputFilter()
 	th = std::thread([this] { Thread(); });
 
 	AddRef();
-	os_atomic_inc_long(&locks2);
+	os_atomic_inc_long(&locks);
 }
 
 VCamFilter2::~VCamFilter2()
@@ -122,7 +122,7 @@ VCamFilter2::~VCamFilter2()
 	if (placeholder.scaled_data)
 		free(placeholder.scaled_data);
 
-	os_atomic_dec_long(&locks2);
+	os_atomic_dec_long(&locks);
 }
 
 const wchar_t *VCamFilter2::FilterName() const
