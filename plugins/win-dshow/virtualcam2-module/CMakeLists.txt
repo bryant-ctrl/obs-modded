@@ -119,15 +119,6 @@ if(OBS_PARENT_ARCHITECTURE STREQUAL CMAKE_VS_PLATFORM_NAME)
     )
   endif()
 
-  if(CMAKE_VS_PLATFORM_NAME MATCHES "(ARM64|x64)")
-    add_custom_command(
-      TARGET obs-virtualcam2-module
-      POST_BUILD
-      COMMAND "${CMAKE_COMMAND}" --build ${CMAKE_SOURCE_DIR}/build_x86 --config $<CONFIG> -t obs-virtualcam2-module
-      COMMENT "Build x86 obs-virtualcam2-module"
-    )
-  endif()
-
   add_dependencies(win-dshow obs-virtualcam2-module)
 endif()
 
