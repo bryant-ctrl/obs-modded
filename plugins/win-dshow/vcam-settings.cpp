@@ -13,15 +13,7 @@
  * Helpers
  * ======================================================================= */
 
-static bool enum_scene_cb(void *param, obs_source_t *source)
-{
-	QComboBox *combo = reinterpret_cast<QComboBox *>(param);
-	if (obs_source_get_type(source) == OBS_SOURCE_TYPE_SCENE) {
-		const char *name = obs_source_get_name(source);
-		combo->addItem(QString::fromUtf8(name));
-	}
-	return true;
-}
+/* (no enum callback needed — we use obs_frontend_get_scenes) */
 
 /* =========================================================================
  * VCamSettingsWidget
@@ -80,7 +72,16 @@ void VCamSettingsWidget::PopulateSceneList(QComboBox *combo,
 {
 	combo->blockSignals(true);
 	combo->clear();
-	obs_enum_sources(enum_scene_cb, combo);
+
+	struct obs_frontend_source_list scenes = {};
+	obs_frontend_get_scenes(&scenes);
+	for (size_t i = 0; i < scenes.sources.num; i++) {
+		obs_source_t *src = scenes.sources.array[i];
+		const char *name = obs_source_get_name(src);
+		if (name)
+			combo->addItem(QString::fromUtf8(name));
+	}
+	obs_frontend_source_list_free(&scenes);
 
 	int idx = combo->findText(QString::fromUtf8(selected_name));
 	if (idx >= 0)
