@@ -5,7 +5,6 @@
 #include "util/threading.h"
 #include "shared-memory-queue.h"
 
-/* Scene name read from module config at start time */
 #define VCAM1_CONFIG_SECTION "VirtualCam"
 #define VCAM1_CONFIG_KEY "Scene1"
 #define VCAM1_CONFIG_DEFAULT "Camera1"
@@ -51,61 +50,78 @@ static bool virtualcam_start(void *data)
 {
 	struct virtualcam_data *vcam = (struct virtualcam_data *)data;
 
+	/* Get base video info first — always valid */
+	struct obs_video_info ovi;
+	if (!obs_get_video_info(&ovi)) {
+		blog(LOG_WARNING,
+		     "VirtualCam1: OBS video not initialized");
+		return false;
+	}
+
+	uint32_t width = ovi.output_width;
+	uint32_t height = ovi.output_height;
+	uint64_t interval = ovi.fps_den * 10000000ULL / ovi.fps_num;
+
 	/* Look up which scene the user assigned to Camera 1 */
 	const char *scene_name = NULL;
 	config_t *config = obs_frontend_get_profile_config();
 	if (config) {
 		config_set_default_string(config, VCAM1_CONFIG_SECTION,
-					  VCAM1_CONFIG_KEY,
-					  VCAM1_CONFIG_DEFAULT);
+					 VCAM1_CONFIG_KEY,
+					 VCAM1_CONFIG_DEFAULT);
 		scene_name = config_get_string(config, VCAM1_CONFIG_SECTION,
-					       VCAM1_CONFIG_KEY);
+					      VCAM1_CONFIG_KEY);
 	}
 	if (!scene_name || !*scene_name)
 		scene_name = VCAM1_CONFIG_DEFAULT;
 
-	/* Create an independent view for the target scene */
-	vcam->view = obs_view_create();
+	/* Try to find the named scene; fall back to current scene */
 	obs_source_t *scene_source = obs_get_source_by_name(scene_name);
-	if (scene_source) {
-		obs_view_set_source(vcam->view, 0, scene_source);
-		obs_source_release(scene_source);
-	} else {
-		blog(LOG_WARNING,
-		     "VirtualCam1: scene '%s' not found, using program output",
+	if (!scene_source) {
+		scene_source = obs_frontend_get_current_scene();
+		blog(LOG_INFO,
+		     "VirtualCam1: scene '%s' not found, using current scene",
 		     scene_name);
 	}
 
-	/* Attach independent video pipeline to the output */
-	video_t *scene_video = obs_view_add(vcam->view);
-	if (scene_video)
-		obs_output_set_media(vcam->output, scene_video,
+	/* Create an independent view so this camera renders its own scene */
+	vcam->view = obs_view_create();
+	if (scene_source) {
+		obs_view_set_source(vcam->view, 0, scene_source);
+		obs_source_release(scene_source);
+	}
+
+	video_t *view_video = obs_view_add(vcam->view);
+	if (view_video) {
+		obs_output_set_media(vcam->output, view_video,
 				     obs_get_audio());
+	} else {
+		blog(LOG_INFO,
+		     "VirtualCam1: obs_view_add failed, using main output");
+		/* view didn't produce video — destroy it and use main */
+		obs_view_destroy(vcam->view);
+		vcam->view = NULL;
+	}
 
-	uint32_t width = obs_output_get_width(vcam->output);
-	uint32_t height = obs_output_get_height(vcam->output);
-
-	struct obs_video_info ovi;
-	obs_get_video_info(&ovi);
-
-	uint64_t interval = ovi.fps_den * 10000000ULL / ovi.fps_num;
-
+	/* Write resolution file for the DirectShow filter */
 	char res[64];
 	snprintf(res, sizeof(res), "%dx%dx%lld", (int)width, (int)height,
 		 (long long)interval);
 
 	char *res_file = os_get_config_path_ptr(VCAM1_RES_FILE);
 	os_quick_write_utf8_file_safe(res_file, res, strlen(res), false, "tmp",
-				      NULL);
+				     NULL);
 	bfree(res_file);
 
 	vcam->vq = video_queue_create_named(width, height, interval,
-					    VCAM1_QUEUE_NAME);
+					   VCAM1_QUEUE_NAME);
 	if (!vcam->vq) {
 		blog(LOG_WARNING, "VirtualCam1: starting virtual-output failed");
-		obs_view_remove(vcam->view);
-		obs_view_destroy(vcam->view);
-		vcam->view = NULL;
+		if (vcam->view) {
+			obs_view_remove(vcam->view);
+			obs_view_destroy(vcam->view);
+			vcam->view = NULL;
+		}
 		return false;
 	}
 
@@ -117,7 +133,8 @@ static bool virtualcam_start(void *data)
 
 	os_atomic_set_bool(&vcam->active, true);
 	os_atomic_set_bool(&vcam->stopping, false);
-	blog(LOG_INFO, "VirtualCam1: output started (scene: %s)", scene_name);
+	blog(LOG_INFO, "VirtualCam1: output started (%dx%d, scene: %s)",
+	     width, height, scene_name);
 	obs_output_begin_data_capture(vcam->output, 0);
 	return true;
 }
@@ -166,7 +183,7 @@ static void virtual_video(void *param, struct video_data *frame)
 	}
 
 	video_queue_write(vcam->vq, frame->data, frame->linesize,
-			  frame->timestamp);
+			 frame->timestamp);
 }
 
 struct obs_output_info virtualcam_info = {
