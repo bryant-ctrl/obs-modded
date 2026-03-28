@@ -27,6 +27,8 @@ jobs:
         run: |
           git clone --depth=1 --recurse-submodules --shallow-submodules `
             https://github.com/obsproject/obs-studio.git obs-studio
+          cd obs-studio
+          git fetch --depth=1 origin --tags
         shell: pwsh
 
       # ── 3. Overlay our modified/new files onto the OBS tree ───────────────
