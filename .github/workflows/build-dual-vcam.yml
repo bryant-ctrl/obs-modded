@@ -1,0 +1,153 @@
+name: Build OBS Dual Virtual Camera
+
+on:
+  push:
+    branches: [ main, master, dual-vcam ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-windows-x64:
+    name: Windows x64
+    runs-on: windows-2022
+
+    env:
+      VIRTUALCAM_GUID:  "A3FCE0F5-3493-419F-958A-ABA1250EC20B"
+      VIRTUALCAM2_GUID: "B4ED1F06-4594-429F-A69B-BBA2361FD31C"
+
+    steps:
+      # ── 1. Checkout our patches repo ──────────────────────────────────────
+      - name: Checkout patches
+        uses: actions/checkout@v4
+        with:
+          path: patches
+
+      # ── 2. Clone OBS Studio (shallow + submodules) ────────────────────────
+      - name: Clone OBS Studio
+        run: |
+          git clone --depth=1 --recurse-submodules --shallow-submodules `
+            https://github.com/obsproject/obs-studio.git obs-studio
+        shell: pwsh
+
+      # ── 3. Overlay our modified/new files onto the OBS tree ───────────────
+      - name: Apply patches
+        run: |
+          $src = "${{ github.workspace }}\patches"
+          $dst = "${{ github.workspace }}\obs-studio"
+
+          $files = @(
+            "CMakePresets.json",
+            "shared\obs-shared-memory-queue\shared-memory-queue.c",
+            "shared\obs-shared-memory-queue\shared-memory-queue.h",
+            "plugins\win-dshow\CMakeLists.txt",
+            "plugins\win-dshow\dshow-plugin.cpp",
+            "plugins\win-dshow\shared-memory-queue.c",
+            "plugins\win-dshow\shared-memory-queue.h",
+            "plugins\win-dshow\virtualcam.c",
+            "plugins\win-dshow\virtualcam2.c",
+            "plugins\win-dshow\vcam-settings.cpp",
+            "plugins\win-dshow\vcam-settings.hpp",
+            "plugins\win-dshow\virtualcam2-module\CMakeLists.txt",
+            "plugins\win-dshow\virtualcam2-module\virtualcam2-filter.cpp",
+            "plugins\win-dshow\virtualcam2-module\virtualcam2-filter.hpp",
+            "plugins\win-dshow\virtualcam2-module\virtualcam2-guid.h.in",
+            "plugins\win-dshow\virtualcam2-module\virtualcam2-install.bat.in",
+            "plugins\win-dshow\virtualcam2-module\virtualcam2-uninstall.bat.in",
+            "plugins\win-dshow\virtualcam2-module\virtualcam2-module.cpp",
+            "plugins\win-dshow\virtualcam2-module\cmake\windows\virtualcam2-module64.def",
+            "plugins\win-dshow\virtualcam2-module\cmake\windows\virtualcam2-module32.def",
+            "plugins\win-dshow\virtualcam2-module\cmake\windows\virtualcam2-module-arm64.def",
+            "plugins\win-dshow\virtualcam2-module\cmake\windows\obs-module.rc.in"
+          )
+
+          foreach ($f in $files) {
+            $target = Join-Path $dst $f
+            $source = Join-Path $src $f
+            New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
+            Copy-Item $source $target -Force
+            Write-Host "Patched: $f"
+          }
+        shell: pwsh
+
+      # ── 4. Set up build tools ─────────────────────────────────────────────
+      - name: Install Qt 6
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.6.*'
+          host: windows
+          target: desktop
+          arch: win64_msvc2019_64
+          dir: ${{ github.workspace }}/Qt
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # ── 5. Download OBS pre-built dependencies ────────────────────────────
+      - name: Download obs-deps
+        run: |
+          $ver = "2024-01-03"
+          $url = "https://github.com/obsproject/obs-deps/releases/download/$ver/windows-deps-$ver-x64.zip"
+          Invoke-WebRequest -Uri $url -OutFile deps.zip
+          Expand-Archive -Path deps.zip -DestinationPath "${{ github.workspace }}/obs-deps" -Force
+        shell: pwsh
+
+      # ── 6. Configure ──────────────────────────────────────────────────────
+      - name: Configure CMake
+        working-directory: obs-studio
+        run: |
+          cmake --preset windows-x64 `
+            -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" `
+            -DVIRTUALCAM_GUID="${{ env.VIRTUALCAM_GUID }}" `
+            -DVIRTUALCAM2_GUID="${{ env.VIRTUALCAM2_GUID }}" `
+            -DENABLE_BROWSER=OFF `
+            -DENABLE_WEBSOCKET=OFF `
+            -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install"
+        shell: pwsh
+
+      # ── 7. Build ──────────────────────────────────────────────────────────
+      - name: Build
+        working-directory: obs-studio
+        run: cmake --build build_x64 --config RelWithDebInfo --parallel
+        shell: pwsh
+
+      # ── 8. Install ────────────────────────────────────────────────────────
+      - name: Install
+        working-directory: obs-studio
+        run: cmake --install build_x64 --config RelWithDebInfo
+        shell: pwsh
+
+      # ── 9. Collect DLLs ───────────────────────────────────────────────────
+      - name: Collect artifacts
+        run: |
+          $out = "${{ github.workspace }}/artifacts"
+          New-Item -ItemType Directory -Force -Path $out
+
+          $pluginDir = "${{ github.workspace }}/install/obs-plugins/64bit"
+          $dataDir   = "${{ github.workspace }}/install/data/obs-plugins/win-dshow"
+
+          $items = @(
+            "$pluginDir/win-dshow.dll",
+            "$dataDir/obs-virtualcam-module64.dll",
+            "$dataDir/obs-virtualcam2-module64.dll",
+            "$dataDir/virtualcam-install.bat",
+            "$dataDir/virtualcam-uninstall.bat",
+            "$dataDir/virtualcam2-install.bat",
+            "$dataDir/virtualcam2-uninstall.bat"
+          )
+          foreach ($f in $items) {
+            if (Test-Path $f) { Copy-Item $f $out }
+            else { Write-Warning "Not found: $f" }
+          }
+
+          Write-Host "--- Artifacts ---"
+          Get-ChildItem $out
+        shell: pwsh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-dual-vcam-windows-x64
+          path: ${{ github.workspace }}/artifacts/
+          if-no-files-found: warn
